@@ -133,6 +133,7 @@ def run_pairwise_similarity(
     min_syllables: int = 4,
     model_id: str = DEFAULT_MODEL_ID,
     batch_size: int = 8,
+    device: str = "auto",
     top_k: int = 100,
     save_similarity_npy: bool = False,
 ) -> PairwiseArtifacts:
@@ -152,7 +153,12 @@ def run_pairwise_similarity(
         min_syllables=min_syllables,
     )
 
-    embedder = TextEmbedder(model_id=model_id, batch_size=batch_size, normalize_embeddings=True)
+    embedder = TextEmbedder(
+        model_id=model_id,
+        batch_size=batch_size,
+        normalize_embeddings=True,
+        device=device,
+    )
     embeddings_a = embedder.encode(sentences_a).embeddings
     embeddings_b = embedder.encode(sentences_b).embeddings
     matrix = cosine_similarity_matrix(embeddings_a, embeddings_b)
@@ -175,6 +181,7 @@ def run_pairwise_similarity(
         "engine": engine,
         "source_format": source_format,
         "model_id": model_id,
+        "device": device,
         "batch_size": batch_size,
         "top_k_requested": top_k,
         "top_k_returned": len(matches),

@@ -82,10 +82,36 @@ class PairwiseTests(unittest.TestCase):
 
             manifest = json.loads(Path(artifacts.manifest_json).read_text(encoding="utf-8"))
             self.assertEqual(manifest["model_id"], "fake/model")
+            self.assertEqual(manifest["device"], "auto")
             self.assertEqual(manifest["segment_count_a"], 2)
             self.assertEqual(manifest["segment_count_b"], 3)
             self.assertEqual(manifest["top_k_requested"], 4)
             self.assertEqual(manifest["top_k_returned"], 4)
+
+    def test_run_pairwise_similarity_passes_device_to_embedder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("tibetan_pipeline.pairwise.segment_text_to_sentences", side_effect=[["a"], ["b"]]):
+                with patch("tibetan_pipeline.pairwise.TextEmbedder") as mock_embedder_cls:
+                    mock_embedder = mock_embedder_cls.return_value
+                    mock_embedder.encode.side_effect = [
+                        EmbeddingResult("fake/model", np.array([[1.0, 0.0]], dtype=np.float32)),
+                        EmbeddingResult("fake/model", np.array([[1.0, 0.0]], dtype=np.float32)),
+                    ]
+                    run_pairwise_similarity(
+                        text_a="unused-a",
+                        text_b="unused-b",
+                        output_dir=temp_dir,
+                        model_id="fake/model",
+                        device="cpu",
+                        top_k=1,
+                    )
+
+            mock_embedder_cls.assert_called_once_with(
+                model_id="fake/model",
+                batch_size=8,
+                normalize_embeddings=True,
+                device="cpu",
+            )
 
 
 if __name__ == "__main__":

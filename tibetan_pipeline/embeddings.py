@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import torch
@@ -28,14 +29,16 @@ class TextEmbedder:
         model_id: str = DEFAULT_MODEL_ID,
         normalize_embeddings: bool = True,
         batch_size: int = 8,
+        device: Literal["auto", "cpu", "mps", "cuda"] = "auto",
     ) -> None:
         self.model_id = model_id
         self.normalize_embeddings = normalize_embeddings
         self.batch_size = batch_size
+        self.device = device
         self._backend = None
         self._tokenizer = None
         self._model = None
-        self._device = "cuda" if torch.cuda.is_available() else "cpu"
+        self._device = _resolve_torch_device(device)
 
     def encode(self, texts: list[str]) -> EmbeddingResult:
         """Encode a list of texts into dense vectors."""
@@ -60,9 +63,14 @@ class TextEmbedder:
             return
 
         try:
-            self._sentence_transformer = SentenceTransformer(self.model_id)
+            self._sentence_transformer = SentenceTransformer(self.model_id, device=self._device)
             self._backend = "sentence-transformers"
-        except Exception:
+        except Exception as exc:
+            if _is_mps_oom(exc):
+                raise RuntimeError(
+                    "MPS out of memory while loading embedding model. "
+                    "Rerun with device='cpu' (CLI: --device cpu)."
+                ) from exc
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
             self._model = AutoModel.from_pretrained(self.model_id)
             self._model.to(self._device)
@@ -90,3 +98,31 @@ class TextEmbedder:
             output_batches.append(pooled.cpu().numpy().astype(np.float32))
 
         return np.vstack(output_batches)
+
+
+def _resolve_torch_device(preferred: Literal["auto", "cpu", "mps", "cuda"] = "auto") -> str:
+    """Pick the best available PyTorch device for inference."""
+    if preferred not in {"auto", "cpu", "mps", "cuda"}:
+        raise ValueError(f"Unsupported device: {preferred}")
+
+    if preferred == "cpu":
+        return "cpu"
+    if preferred == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA requested but not available.")
+        return "cuda"
+    if preferred == "mps":
+        if not torch.backends.mps.is_available():
+            raise RuntimeError("MPS requested but not available.")
+        return "mps"
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _is_mps_oom(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "mps backend out of memory" in message or ("mps" in message and "out of memory" in message)
