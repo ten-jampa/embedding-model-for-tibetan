@@ -155,3 +155,9 @@
 - Summary: Added and executed one-file end-to-end three-engine comparison on unseen external unicode data.
 - Context: The previous clump benchmark depended on an upstream segmented CSV, so we needed a less circular manual-review workflow on raw text from the separate worktree where segmentation assumptions are not inherited from the same upstream process.
 - Details: Added `scripts/run_one_file_engine_compare.py` to split raw Tibetan text into shad-delimited units, clump units (`6/3`), run `botok_ours`, `botok_intellexus`, and `regex_intellexus`, and export per-engine review CSVs plus `output/one_file_compare/kanjurderge_001/manual_review_side_by_side.csv`; executed against `.../converted/unicode/KanjurDerge/001.txt` with `unit_limit=1200` producing 400 clumps for manual side-by-side inspection.
+
+## 2026-03-13 22:02:34 EDT
+- Status: completed
+- Summary: Rewrote project README to document the segmentation stage as a complete, PR-ready deliverable.
+- Context: We completed substantial segmentation and benchmarking work across multiple scripts/engines; without a consolidated README, reviewers on `origin/main` would not have a single source of truth for setup, usage, scope, and reproducibility expectations.
+- Details: Updated `README.md` with architecture overview, engine descriptions, installation notes, exact CLI commands for segmentation and benchmark workflows, test command, artifact/data policy, and an explicit boundary between the completed segmentation stage and the upcoming pairwise similarity stage.
