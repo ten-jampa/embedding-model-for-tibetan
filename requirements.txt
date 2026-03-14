@@ -1,0 +1,14 @@
+# Phase 1: embedding baseline
+numpy
+pandas
+botok
+pyewts
+sentence-transformers>=2.2.0
+torch>=2.0.0
+transformers>=4.30.0
+
+# Plotting and Visualization
+matplotlib
+seaborn
+plotly
+ 
