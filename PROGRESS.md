@@ -161,3 +161,9 @@
 - Summary: Rewrote project README to document the segmentation stage as a complete, PR-ready deliverable.
 - Context: We completed substantial segmentation and benchmarking work across multiple scripts/engines; without a consolidated README, reviewers on `origin/main` would not have a single source of truth for setup, usage, scope, and reproducibility expectations.
 - Details: Updated `README.md` with architecture overview, engine descriptions, installation notes, exact CLI commands for segmentation and benchmark workflows, test command, artifact/data policy, and an explicit boundary between the completed segmentation stage and the upcoming pairwise similarity stage.
+
+## 2026-03-13 22:11:35 EDT
+- Status: completed
+- Summary: Implemented the first end-to-end pairwise similarity stage on top of the segmentation foundation.
+- Context: The project goal now shifts from segmentation benchmarking to retrieval readiness, requiring a concrete `Text A` vs `Text B` path that produces ranked sentence-level similarities with reviewable artifacts.
+- Details: Added `tibetan_pipeline/pairwise.py` and `scripts/run_pairwise_text_similarity.py` to run segment -> embed -> cosine matrix -> global top-k output (`CSV`, `JSONL`, and run manifest), plus `tests/test_pairwise.py` covering similarity math, ranking behavior, and mocked end-to-end artifact generation.
