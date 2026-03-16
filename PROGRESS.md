@@ -167,3 +167,13 @@
 - Summary: Implemented the first end-to-end pairwise similarity stage on top of the segmentation foundation.
 - Context: The project goal now shifts from segmentation benchmarking to retrieval readiness, requiring a concrete `Text A` vs `Text B` path that produces ranked sentence-level similarities with reviewable artifacts.
 - Details: Added `tibetan_pipeline/pairwise.py` and `scripts/run_pairwise_text_similarity.py` to run segment -> embed -> cosine matrix -> global top-k output (`CSV`, `JSONL`, and run manifest), plus `tests/test_pairwise.py` covering similarity math, ranking behavior, and mocked end-to-end artifact generation.
+
+## 2026-03-16 11:00:00 EDT Add conda environment spec
+**Status**: ✅ Complete
+**Verification**: Added `environment.yml`, then ran a Python YAML parse/assertion that printed `environment.yml parsed and contains expected conda/pip entries`.
+**Notes**: The env uses `python=3.11` for broad ML package compatibility and installs `requirements.txt` with `--no-build-isolation` because this repo has already seen `pyewts` fail under pip build isolation.
+
+## 2026-03-16 11:35:00 EDT Complete real conda env and Jupyter kernel setup
+**Status**: ✅ Complete
+**Verification**: `conda env update -n embedding-tibetan-env -f environment.yml --prune` completed successfully; `conda run -n embedding-tibetan-env python -m pip install --no-build-isolation botok pyewts` completed successfully; `conda run -n embedding-tibetan-env python -m ipykernel install --user --name embedding-tibetan-env --display-name "Python (embedding-tibetan-env)"` installed the kernelspec; final smoke test printed `imports_ok`, and the kernel list now includes `embedding-tibetan-env`.
+**Notes**: The final working setup is hybrid: conda handles the main scientific/Jupyter stack, while `botok` and `pyewts` are installed afterward with pip because they are not available on conda-forge and `pyewts` needs a compatible `setuptools` plus `--no-build-isolation`.

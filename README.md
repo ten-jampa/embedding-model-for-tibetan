@@ -14,8 +14,18 @@ This repository provides an end-to-end Tibetan research pipeline for:
 - `output/`: local run artifacts (git-ignored)
 
 ## Install
+Preferred conda setup:
 ```bash
-python -m pip install -r requirements.txt
+conda env create -f environment.yml
+conda run -n embedding-tibetan-env python -m pip install --no-build-isolation botok pyewts
+conda run -n embedding-tibetan-env python -m ipykernel install --user --name embedding-tibetan-env --display-name "Python (embedding-tibetan-env)"
+conda activate embedding-tibetan-env
+```
+
+If you prefer pip in an existing environment:
+```bash
+python -m pip install --no-build-isolation -r requirements.txt
+python -m ipykernel install --user --name embedding-tibetan-env --display-name "Python (embedding-tibetan-env)"
 ```
 
 Optional but recommended for faster first run:
