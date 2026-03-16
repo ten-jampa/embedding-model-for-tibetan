@@ -1,11 +1,38 @@
-# Project AGENTS Instructions
+# Repository Guidelines
 
-This repo follows the global Codex agent instructions in `~/.codex/AGENTS.md` and adds the project-specific rule below.
+## Project Structure & Module Organization
+- `tibetan_pipeline/`: main Python package (normalization, segmentation, clumping, pseudo-eval, embeddings, CLI).
+- `tibetan_pipeline/segmenters/`: pluggable segmenter interface and engine adapters.
+- `intellexus_engine_code/`: Intellexus-specific engine implementations used by adapters.
+- `scripts/`: runnable entry points for end-to-end workflows (pipeline run, benchmark, one-file compare).
+- `tests/`: unit tests (`test_*.py`) covering CLI, normalization, pairwise logic, clumping, and segmenters.
+- `tasks/`: lightweight planning and lessons docs.
 
-## Long-Running Commands
+## Build, Test, and Development Commands
+- Install deps: `python -m pip install -r requirements.txt`
+- Run all tests: `python -m unittest discover -s tests -v`
+- Run segmentation pipeline: `python scripts/run_tibetan_pipeline.py --input <file> --output-dir output/<run_name> --engine botok_ours`
+- Run clumped pseudo-eval: `python scripts/run_clumped_segmentation_eval.py --input <file> --output-dir output/<run_name> --engine botok_ours`
+- Run multi-engine benchmark: `python scripts/run_engine_benchmarks.py --input <file> --output-dir output/benchmarks --engines botok_ours botok_intellexus regex_intellexus`
 
-- Any script, build, server, training job, watch process, or shell command that may take a long time or persist should be started inside `tmux`.
-- Name the `tmux` session clearly so the user can attach to it directly. Prefer names shaped like `repo-purpose`, for example `embedding-model-segmentation`, `embedding-model-train`, or `embedding-model-tests`.
-- If a sub-agent starts a long-running process, it must follow the same rule and use its own clearly named `tmux` session.
-- For short, bounded commands such as quick file inspection, unit tests, or one-off checks, `tmux` is not required.
-- When starting a long-running process in `tmux`, tell the user the session name so they can inspect it themselves.
+## Coding Style & Naming Conventions
+- Use Python 3 with 4-space indentation, type hints, and `from __future__ import annotations` in new modules when appropriate.
+- Prefer `snake_case` for functions/variables, `PascalCase` for classes, and descriptive module names.
+- Keep functions focused and side effects explicit; prefer `pathlib.Path` for filesystem logic.
+- Match existing docstring style: short, purpose-first module/class docstrings.
+
+## Testing Guidelines
+- Framework: built-in `unittest` (no pytest dependency required).
+- Place tests in `tests/` and name files `test_<feature>.py`; test methods should start with `test_`.
+- Add or update tests for behavior changes, especially CLI argument wiring and segmentation boundaries.
+- Run `python -m unittest discover -s tests -v` before opening a PR.
+
+## Commit & Pull Request Guidelines
+- Follow Conventional Commit prefixes seen in history: `feat:`, `docs:`, `fix:`, `test:`, `refactor:`.
+- Keep commits scoped to one logical change and include tests/docs in the same PR when relevant.
+- PRs should include: concise summary, why the change is needed, validation steps/commands run, and sample output paths (for script changes).
+- For workflow changes, include a small reproducible command example in the PR description.
+
+## Security & Configuration Tips
+- Do not commit large input datasets or generated outputs (`data/`, `output/` are typically local artifacts).
+- Use local cache paths (for example `.cache/botok/dialect_packs`) and avoid hardcoded absolute machine-specific paths.

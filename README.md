@@ -31,6 +31,15 @@ The next phase (separate scope) is pairwise text-to-text sentence similarity ret
 - `scripts/run_clumped_segmentation_eval.py`: single-engine clumped pseudo-eval
 - `scripts/run_engine_benchmarks.py`: multi-engine clumped benchmark comparison
 - `scripts/run_one_file_engine_compare.py`: one-file side-by-side engine comparison
+- `scripts/run_pairwise_text_similarity.py`: two-text sentence similarity with top-k outputs
+
+### Jupyter SDK
+- `tibetan_pipeline.sdk.TibetanResearchSDK`: high-level notebook API for modular experimentation
+  - `segment_text(...)`
+  - `embed_sentences(...)`
+  - `pairwise(...)`
+  - `pairwise_from_sentences(...)`
+- Notebook starter: `notebooks/01_research_sdk_starter.ipynb`
 
 ## Installation
 
@@ -136,7 +145,7 @@ Run unit tests:
 python -m unittest discover -s tests -v
 ```
 
-Current suite covers normalization, segmenter behavior contracts, clumping/pseudo-eval basics, CLI wiring, and engine resolver mapping.
+Current suite covers normalization, segmenter behavior contracts, clumping/pseudo-eval basics, CLI wiring, engine resolver mapping, pairwise similarity utilities, and SDK behavior.
 
 ## Data and Artifacts Policy
 
