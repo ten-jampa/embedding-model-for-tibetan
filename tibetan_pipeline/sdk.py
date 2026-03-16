@@ -91,6 +91,7 @@ class TibetanResearchSDK:
         model_id: str = DEFAULT_MODEL_ID,
         batch_size: int = 8,
         device: Literal["auto", "cpu", "mps", "cuda"] = "auto",
+        embedding_progress: Literal["off", "batch", "sentence"] = "off",
     ) -> None:
         self.engine = engine
         self.source_format = source_format
@@ -99,6 +100,7 @@ class TibetanResearchSDK:
         self.model_id = model_id
         self.batch_size = batch_size
         self.device = device
+        self.embedding_progress = embedding_progress
         self._segmenter = resolve_segmenter(
             engine=engine,
             dialect_pack_dir=botok_cache_dir,
@@ -127,17 +129,21 @@ class TibetanResearchSDK:
         model_id: str | None = None,
         batch_size: int | None = None,
         device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
+        embedding_progress: Literal["off", "batch", "sentence"] | None = None,
+        is_query: bool = False,
     ) -> EmbeddingView:
         model_id = model_id or self.model_id
         batch_size = batch_size if batch_size is not None else self.batch_size
         device = device or self.device
+        embedding_progress = embedding_progress or self.embedding_progress
         embedder = TextEmbedder(
             model_id=model_id,
             batch_size=batch_size,
             normalize_embeddings=True,
             device=device,
+            embedding_progress=embedding_progress,
         )
-        encoded = embedder.encode(sentences)
+        encoded = embedder.encode_queries(sentences) if is_query else embedder.encode_corpus(sentences)
         return EmbeddingView(
             model_id=encoded.model_id,
             device=device,
@@ -154,6 +160,7 @@ class TibetanResearchSDK:
         model_id: str | None = None,
         batch_size: int | None = None,
         device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
+        embedding_progress: Literal["off", "batch", "sentence"] | None = None,
     ) -> PairwiseView:
         sentences_a = segment_text_to_sentences(
             text_a,
@@ -176,6 +183,7 @@ class TibetanResearchSDK:
             model_id=model_id,
             batch_size=batch_size,
             device=device,
+            embedding_progress=embedding_progress,
         )
 
     def pairwise_from_sentences(
@@ -187,18 +195,23 @@ class TibetanResearchSDK:
         model_id: str | None = None,
         batch_size: int | None = None,
         device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
+        embedding_progress: Literal["off", "batch", "sentence"] | None = None,
     ) -> PairwiseView:
         embedding_a = self.embed_sentences(
             sentences_a,
             model_id=model_id,
             batch_size=batch_size,
             device=device,
+            embedding_progress=embedding_progress,
+            is_query=True,
         )
         embedding_b = self.embed_sentences(
             sentences_b,
             model_id=model_id,
             batch_size=batch_size,
             device=device,
+            embedding_progress=embedding_progress,
+            is_query=False,
         )
         matrix = cosine_similarity_matrix(embedding_a.embeddings, embedding_b.embeddings)
         matches = global_top_k_matches(matrix, sentences_a, sentences_b, top_k)

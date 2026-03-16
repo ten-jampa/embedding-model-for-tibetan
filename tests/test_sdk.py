@@ -36,9 +36,24 @@ class SDKTests(unittest.TestCase):
 
     def test_embed_sentences_passes_device_and_returns_dataframe(self) -> None:
         with patch("tibetan_pipeline.sdk.resolve_segmenter", return_value=FakeSegmenter()):
-            sdk = TibetanResearchSDK(device="cpu", model_id="fake/model", batch_size=2)
-        with patch("tibetan_pipeline.sdk.TextEmbedder.encode", return_value=EmbeddingResult("fake/model", np.ones((2, 3), dtype=np.float32))):
+            sdk = TibetanResearchSDK(
+                device="cpu",
+                model_id="fake/model",
+                batch_size=2,
+                embedding_progress="batch",
+            )
+        with patch("tibetan_pipeline.sdk.TextEmbedder") as mock_embedder_cls:
+            mock_embedder = mock_embedder_cls.return_value
+            mock_embedder.encode_corpus.return_value = EmbeddingResult("fake/model", np.ones((2, 3), dtype=np.float32))
             view = sdk.embed_sentences(["a", "b"])
+
+        mock_embedder_cls.assert_called_once_with(
+            model_id="fake/model",
+            batch_size=2,
+            normalize_embeddings=True,
+            device="cpu",
+            embedding_progress="batch",
+        )
 
         self.assertEqual(view.model_id, "fake/model")
         self.assertEqual(view.device, "cpu")
@@ -47,17 +62,28 @@ class SDKTests(unittest.TestCase):
         self.assertEqual(len(df), 2)
         self.assertIn("vector_norm", df.columns)
 
+    def test_embed_sentences_allows_progress_override(self) -> None:
+        with patch("tibetan_pipeline.sdk.resolve_segmenter", return_value=FakeSegmenter()):
+            sdk = TibetanResearchSDK(device="cpu", model_id="fake/model", batch_size=2, embedding_progress="off")
+        with patch("tibetan_pipeline.sdk.TextEmbedder") as mock_embedder_cls:
+            mock_embedder = mock_embedder_cls.return_value
+            mock_embedder.encode_corpus.return_value = EmbeddingResult("fake/model", np.ones((1, 3), dtype=np.float32))
+            sdk.embed_sentences(["a"], embedding_progress="sentence")
+
+        mock_embedder_cls.assert_called_once_with(
+            model_id="fake/model",
+            batch_size=2,
+            normalize_embeddings=True,
+            device="cpu",
+            embedding_progress="sentence",
+        )
+
     def test_pairwise_from_sentences_returns_ranked_dataframe(self) -> None:
         with patch("tibetan_pipeline.sdk.resolve_segmenter", return_value=FakeSegmenter()):
             sdk = TibetanResearchSDK(device="cpu", model_id="fake/model", batch_size=1)
-        with patch(
-            "tibetan_pipeline.sdk.TextEmbedder.encode",
-            side_effect=[
-                EmbeddingResult("fake/model", np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)),
-                EmbeddingResult("fake/model", np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)),
-            ],
-        ):
-            view = sdk.pairwise_from_sentences(["a0", "a1"], ["b0", "b1"], top_k=2)
+        with patch("tibetan_pipeline.sdk.TextEmbedder.encode_queries", return_value=EmbeddingResult("fake/model", np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))):
+            with patch("tibetan_pipeline.sdk.TextEmbedder.encode_corpus", return_value=EmbeddingResult("fake/model", np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32))):
+                view = sdk.pairwise_from_sentences(["a0", "a1"], ["b0", "b1"], top_k=2)
 
         self.assertEqual(view.similarity_matrix.shape, (2, 2))
         topk_df = view.topk_dataframe()

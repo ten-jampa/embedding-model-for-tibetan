@@ -55,12 +55,13 @@ class PairwiseTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch("tibetan_pipeline.pairwise.segment_text_to_sentences", side_effect=[sentences_a, sentences_b]):
-                with patch("tibetan_pipeline.pairwise.TextEmbedder.encode", side_effect=fake_encode):
-                    artifacts = run_pairwise_similarity(
-                        text_a="unused-a",
-                        text_b="unused-b",
-                        output_dir=temp_dir,
-                        model_id="fake/model",
+                with patch("tibetan_pipeline.pairwise.TextEmbedder.encode_queries", side_effect=fake_encode):
+                    with patch("tibetan_pipeline.pairwise.TextEmbedder.encode_corpus", side_effect=fake_encode):
+                        artifacts = run_pairwise_similarity(
+                            text_a="unused-a",
+                            text_b="unused-b",
+                            output_dir=temp_dir,
+                            model_id="fake/model",
                         top_k=4,
                     )
 
@@ -93,10 +94,8 @@ class PairwiseTests(unittest.TestCase):
             with patch("tibetan_pipeline.pairwise.segment_text_to_sentences", side_effect=[["a"], ["b"]]):
                 with patch("tibetan_pipeline.pairwise.TextEmbedder") as mock_embedder_cls:
                     mock_embedder = mock_embedder_cls.return_value
-                    mock_embedder.encode.side_effect = [
-                        EmbeddingResult("fake/model", np.array([[1.0, 0.0]], dtype=np.float32)),
-                        EmbeddingResult("fake/model", np.array([[1.0, 0.0]], dtype=np.float32)),
-                    ]
+                    mock_embedder.encode_queries.return_value = EmbeddingResult("fake/model", np.array([[1.0, 0.0]], dtype=np.float32))
+                    mock_embedder.encode_corpus.return_value = EmbeddingResult("fake/model", np.array([[1.0, 0.0]], dtype=np.float32))
                     run_pairwise_similarity(
                         text_a="unused-a",
                         text_b="unused-b",
@@ -111,6 +110,7 @@ class PairwiseTests(unittest.TestCase):
                 batch_size=8,
                 normalize_embeddings=True,
                 device="cpu",
+                embedding_progress="off",
             )
 
 

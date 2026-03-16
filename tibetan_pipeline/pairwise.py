@@ -6,6 +6,7 @@ import csv
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 
@@ -134,6 +135,7 @@ def run_pairwise_similarity(
     model_id: str = DEFAULT_MODEL_ID,
     batch_size: int = 8,
     device: str = "auto",
+    embedding_progress: Literal["off", "batch", "sentence"] = "off",
     top_k: int = 100,
     save_similarity_npy: bool = False,
 ) -> PairwiseArtifacts:
@@ -158,9 +160,10 @@ def run_pairwise_similarity(
         batch_size=batch_size,
         normalize_embeddings=True,
         device=device,
+        embedding_progress=embedding_progress,
     )
-    embeddings_a = embedder.encode(sentences_a).embeddings
-    embeddings_b = embedder.encode(sentences_b).embeddings
+    embeddings_a = embedder.encode_queries(sentences_a).embeddings
+    embeddings_b = embedder.encode_corpus(sentences_b).embeddings
     matrix = cosine_similarity_matrix(embeddings_a, embeddings_b)
     matches = global_top_k_matches(matrix, sentences_a, sentences_b, top_k)
 
@@ -185,6 +188,7 @@ def run_pairwise_similarity(
         "batch_size": batch_size,
         "top_k_requested": top_k,
         "top_k_returned": len(matches),
+        "embedding_progress": embedding_progress,
         "segment_count_a": len(sentences_a),
         "segment_count_b": len(sentences_b),
         "matrix_shape": list(matrix.shape),

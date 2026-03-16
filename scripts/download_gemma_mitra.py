@@ -8,7 +8,7 @@ import os
 import time
 
 from huggingface_hub import snapshot_download
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 MODEL_ID = "buddhist-nlp/gemma-2-mitra-e"
@@ -29,8 +29,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def verify_local(model_id: str, cache_dir: str | None) -> None:
-    AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir, local_files_only=True)
-    AutoModel.from_pretrained(model_id, cache_dir=cache_dir, local_files_only=True)
+    AutoTokenizer.from_pretrained(
+        model_id,
+        cache_dir=cache_dir,
+        local_files_only=True,
+        trust_remote_code=True,
+    )
+    AutoModelForCausalLM.from_pretrained(
+        model_id,
+        cache_dir=cache_dir,
+        local_files_only=True,
+        trust_remote_code=True,
+    )
 
 
 def main() -> int:

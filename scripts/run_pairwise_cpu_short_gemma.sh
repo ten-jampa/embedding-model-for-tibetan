@@ -46,10 +46,10 @@ cd "${REPO_ROOT}"
   --botok-cache-dir .cache/botok/dialect_packs \
   --top-k 10 \
   --batch-size 1 \
-  --device cpu
+  --device cpu \
+  --embedding-progress sentence
 
 echo "[3/3] Done. Artifacts:"
 echo "  ${OUT_DIR}/run_manifest.json"
 echo "  ${OUT_DIR}/topk_pairs.csv"
 echo "  ${OUT_DIR}/topk_pairs.jsonl"
-

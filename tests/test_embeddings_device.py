@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from tibetan_pipeline.embeddings import TextEmbedder, _resolve_torch_device
+from tibetan_pipeline.embeddings import DEFAULT_QUERY_INSTRUCTION, TextEmbedder, _resolve_torch_device
 
 
 class EmbeddingDeviceTests(unittest.TestCase):
@@ -39,6 +39,14 @@ class EmbeddingDeviceTests(unittest.TestCase):
             embedder = TextEmbedder(model_id="fake/model", device="cpu")
             embedder._ensure_backend()
             mock_st.assert_called_once_with("fake/model", device="cpu")
+
+    def test_query_format_uses_model_card_template(self) -> None:
+        embedder = TextEmbedder(model_id="fake/model", device="cpu")
+        formatted = embedder._format_query("བོད་ཡིག")
+        self.assertEqual(
+            formatted,
+            f"<instruct>{DEFAULT_QUERY_INSTRUCTION}\n<query>བོད་ཡིག",
+        )
 
 
 if __name__ == "__main__":

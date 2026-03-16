@@ -32,6 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "mps", "cuda"])
+    parser.add_argument(
+        "--embedding-progress",
+        default="off",
+        choices=["off", "batch", "sentence"],
+        help="Embedding progress logging granularity.",
+    )
     parser.add_argument("--top-k", type=int, default=100)
     parser.add_argument("--save-similarity-npy", action="store_true")
     return parser
@@ -54,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         model_id=args.model_id,
         batch_size=args.batch_size,
         device=args.device,
+        embedding_progress=args.embedding_progress,
         top_k=args.top_k,
         save_similarity_npy=args.save_similarity_npy,
     )
