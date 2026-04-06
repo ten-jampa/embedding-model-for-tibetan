@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
-from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 DEFAULT_MODEL_ID = "buddhist-nlp/gemma-2-mitra-e"
 DEFAULT_QUERY_INSTRUCTION = "Please find the semantically most similar text in Tibetan."
+TorchDTypeName = Literal["auto", "float16", "bfloat16", "float32"]
 
 
 @dataclass(slots=True)
@@ -34,6 +35,9 @@ class TextEmbedder:
         query_instruction: str = DEFAULT_QUERY_INSTRUCTION,
         max_length: int = 512,
         embedding_progress: Literal["off", "batch", "sentence"] = "off",
+        torch_dtype: TorchDTypeName | None = None,
+        device_map: str | dict[str, int | str] | None = None,
+        load_in_8bit: bool = False,
     ) -> None:
         self.model_id = model_id
         self.normalize_embeddings = normalize_embeddings
@@ -42,6 +46,9 @@ class TextEmbedder:
         self.query_instruction = query_instruction
         self.max_length = max_length
         self.embedding_progress = embedding_progress
+        self.torch_dtype = torch_dtype
+        self.device_map = device_map
+        self.load_in_8bit = load_in_8bit
         self._backend = None
         self._tokenizer = None
         self._model = None
@@ -86,8 +93,11 @@ class TextEmbedder:
         if self.model_id == DEFAULT_MODEL_ID:
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
-                self._model = AutoModelForCausalLM.from_pretrained(self.model_id, trust_remote_code=True)
-                self._model.to(self._device)
+                self._model = AutoModelForCausalLM.from_pretrained(
+                    self.model_id,
+                    **self._model_load_kwargs(trust_remote_code=True),
+                )
+                self._move_model_to_device()
                 self._model.eval()
                 if self._tokenizer.pad_token is None and self._tokenizer.eos_token is not None:
                     self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -113,8 +123,8 @@ class TextEmbedder:
                     "Rerun with device='cpu' (CLI: --device cpu)."
                 ) from exc
             self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-            self._model = AutoModel.from_pretrained(self.model_id)
-            self._model.to(self._device)
+            self._model = AutoModel.from_pretrained(self.model_id, **self._model_load_kwargs())
+            self._move_model_to_device()
             self._model.eval()
             self._backend = "transformers"
 
@@ -169,6 +179,24 @@ class TextEmbedder:
     def _format_query(self, text: str) -> str:
         return f"<instruct>{self.query_instruction}\n<query>{text}"
 
+    def _model_load_kwargs(self, *, trust_remote_code: bool = False) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {}
+        if trust_remote_code:
+            kwargs["trust_remote_code"] = True
+        if self.torch_dtype is not None:
+            kwargs["torch_dtype"] = _resolve_torch_dtype(self.torch_dtype)
+        if self.device_map is not None:
+            kwargs["device_map"] = self.device_map
+        if self.load_in_8bit:
+            kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+            kwargs.setdefault("device_map", "auto")
+        return kwargs
+
+    def _move_model_to_device(self) -> None:
+        if self.device_map is not None or self.load_in_8bit:
+            return
+        self._model.to(self._device)
+
     def _log(self, level: Literal["batch", "sentence"], message: str) -> None:
         if self.embedding_progress == "off":
             return
@@ -198,6 +226,18 @@ def _resolve_torch_device(preferred: Literal["auto", "cpu", "mps", "cuda"] = "au
     if torch.backends.mps.is_available():
         return "mps"
     return "cpu"
+
+
+def _resolve_torch_dtype(dtype: TorchDTypeName) -> str | torch.dtype:
+    if dtype == "auto":
+        return "auto"
+    if dtype == "float16":
+        return torch.float16
+    if dtype == "bfloat16":
+        return torch.bfloat16
+    if dtype == "float32":
+        return torch.float32
+    raise ValueError(f"Unsupported torch_dtype: {dtype}")
 
 
 def _is_mps_oom(exc: BaseException) -> bool:

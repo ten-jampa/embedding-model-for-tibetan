@@ -5,7 +5,9 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from tibetan_pipeline.embeddings import DEFAULT_QUERY_INSTRUCTION, TextEmbedder, _resolve_torch_device
+import torch
+
+from tibetan_pipeline.embeddings import DEFAULT_MODEL_ID, DEFAULT_QUERY_INSTRUCTION, TextEmbedder, _resolve_torch_device
 
 
 class EmbeddingDeviceTests(unittest.TestCase):
@@ -47,6 +49,51 @@ class EmbeddingDeviceTests(unittest.TestCase):
             formatted,
             f"<instruct>{DEFAULT_QUERY_INSTRUCTION}\n<query>བོད་ཡིག",
         )
+
+    def test_default_model_receives_torch_dtype_and_device_map(self) -> None:
+        with patch("tibetan_pipeline.embeddings.AutoTokenizer") as mock_tokenizer_cls:
+            with patch("tibetan_pipeline.embeddings.AutoModelForCausalLM") as mock_model_cls:
+                mock_tokenizer = mock_tokenizer_cls.from_pretrained.return_value
+                mock_tokenizer.pad_token = "<pad>"
+                mock_tokenizer.eos_token = "</s>"
+                embedder = TextEmbedder(
+                    model_id=DEFAULT_MODEL_ID,
+                    device="cpu",
+                    torch_dtype="float16",
+                    device_map="auto",
+                )
+                embedder._ensure_backend()
+
+        mock_model_cls.from_pretrained.assert_called_once_with(
+            DEFAULT_MODEL_ID,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+            device_map="auto",
+        )
+        mock_model_cls.from_pretrained.return_value.to.assert_not_called()
+
+    def test_8bit_loading_uses_quantization_config_without_to_device(self) -> None:
+        with patch("tibetan_pipeline.embeddings.AutoTokenizer") as mock_tokenizer_cls:
+            with patch("tibetan_pipeline.embeddings.AutoModelForCausalLM") as mock_model_cls:
+                with patch("tibetan_pipeline.embeddings.BitsAndBytesConfig") as mock_bnb_cls:
+                    mock_tokenizer = mock_tokenizer_cls.from_pretrained.return_value
+                    mock_tokenizer.pad_token = "<pad>"
+                    mock_tokenizer.eos_token = "</s>"
+                    embedder = TextEmbedder(
+                        model_id=DEFAULT_MODEL_ID,
+                        device="cpu",
+                        load_in_8bit=True,
+                    )
+                    embedder._ensure_backend()
+
+        mock_bnb_cls.assert_called_once_with(load_in_8bit=True)
+        mock_model_cls.from_pretrained.assert_called_once_with(
+            DEFAULT_MODEL_ID,
+            trust_remote_code=True,
+            quantization_config=mock_bnb_cls.return_value,
+            device_map="auto",
+        )
+        mock_model_cls.from_pretrained.return_value.to.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -9,9 +9,9 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from .embeddings import DEFAULT_MODEL_ID, TextEmbedder
+from .embeddings import DEFAULT_MODEL_ID, TextEmbedder, TorchDTypeName
 from .normalization import normalize_text
-from .pairwise import PairMatch, cosine_similarity_matrix, global_top_k_matches, segment_text_to_sentences
+from .pairwise import PairMatch, cosine_similarity_matrix, global_top_k_matches
 from .pipeline import resolve_segmenter
 
 
@@ -92,6 +92,9 @@ class TibetanResearchSDK:
         batch_size: int = 8,
         device: Literal["auto", "cpu", "mps", "cuda"] = "auto",
         embedding_progress: Literal["off", "batch", "sentence"] = "off",
+        torch_dtype: TorchDTypeName | None = None,
+        device_map: str | dict[str, int | str] | None = None,
+        load_in_8bit: bool = False,
     ) -> None:
         self.engine = engine
         self.source_format = source_format
@@ -101,11 +104,15 @@ class TibetanResearchSDK:
         self.batch_size = batch_size
         self.device = device
         self.embedding_progress = embedding_progress
+        self.torch_dtype = torch_dtype
+        self.device_map = device_map
+        self.load_in_8bit = load_in_8bit
         self._segmenter = resolve_segmenter(
             engine=engine,
             dialect_pack_dir=botok_cache_dir,
             min_syllables=min_syllables,
         )
+        self._embedders: dict[tuple[object, ...], TextEmbedder] = {}
 
     def segment_text(self, text: str, *, source_format: str | None = None) -> SegmentationView:
         source_format = source_format or self.source_format
@@ -130,18 +137,26 @@ class TibetanResearchSDK:
         batch_size: int | None = None,
         device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
         embedding_progress: Literal["off", "batch", "sentence"] | None = None,
+        torch_dtype: TorchDTypeName | None = None,
+        device_map: str | dict[str, int | str] | None = None,
+        load_in_8bit: bool | None = None,
         is_query: bool = False,
     ) -> EmbeddingView:
         model_id = model_id or self.model_id
         batch_size = batch_size if batch_size is not None else self.batch_size
         device = device or self.device
         embedding_progress = embedding_progress or self.embedding_progress
-        embedder = TextEmbedder(
+        torch_dtype = torch_dtype if torch_dtype is not None else self.torch_dtype
+        device_map = device_map if device_map is not None else self.device_map
+        load_in_8bit = load_in_8bit if load_in_8bit is not None else self.load_in_8bit
+        embedder = self._get_embedder(
             model_id=model_id,
             batch_size=batch_size,
-            normalize_embeddings=True,
             device=device,
             embedding_progress=embedding_progress,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            load_in_8bit=load_in_8bit,
         )
         encoded = embedder.encode_queries(sentences) if is_query else embedder.encode_corpus(sentences)
         return EmbeddingView(
@@ -161,21 +176,12 @@ class TibetanResearchSDK:
         batch_size: int | None = None,
         device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
         embedding_progress: Literal["off", "batch", "sentence"] | None = None,
+        torch_dtype: TorchDTypeName | None = None,
+        device_map: str | dict[str, int | str] | None = None,
+        load_in_8bit: bool | None = None,
     ) -> PairwiseView:
-        sentences_a = segment_text_to_sentences(
-            text_a,
-            engine=self.engine,
-            source_format=self.source_format,
-            botok_cache_dir=self.botok_cache_dir,
-            min_syllables=self.min_syllables,
-        )
-        sentences_b = segment_text_to_sentences(
-            text_b,
-            engine=self.engine,
-            source_format=self.source_format,
-            botok_cache_dir=self.botok_cache_dir,
-            min_syllables=self.min_syllables,
-        )
+        sentences_a = self._segment_text_to_sentences(text_a)
+        sentences_b = self._segment_text_to_sentences(text_b)
         return self.pairwise_from_sentences(
             sentences_a,
             sentences_b,
@@ -184,6 +190,9 @@ class TibetanResearchSDK:
             batch_size=batch_size,
             device=device,
             embedding_progress=embedding_progress,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            load_in_8bit=load_in_8bit,
         )
 
     def pairwise_from_sentences(
@@ -196,6 +205,9 @@ class TibetanResearchSDK:
         batch_size: int | None = None,
         device: Literal["auto", "cpu", "mps", "cuda"] | None = None,
         embedding_progress: Literal["off", "batch", "sentence"] | None = None,
+        torch_dtype: TorchDTypeName | None = None,
+        device_map: str | dict[str, int | str] | None = None,
+        load_in_8bit: bool | None = None,
     ) -> PairwiseView:
         embedding_a = self.embed_sentences(
             sentences_a,
@@ -203,6 +215,9 @@ class TibetanResearchSDK:
             batch_size=batch_size,
             device=device,
             embedding_progress=embedding_progress,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            load_in_8bit=load_in_8bit,
             is_query=True,
         )
         embedding_b = self.embed_sentences(
@@ -211,6 +226,9 @@ class TibetanResearchSDK:
             batch_size=batch_size,
             device=device,
             embedding_progress=embedding_progress,
+            torch_dtype=torch_dtype,
+            device_map=device_map,
+            load_in_8bit=load_in_8bit,
             is_query=False,
         )
         matrix = cosine_similarity_matrix(embedding_a.embeddings, embedding_b.embeddings)
@@ -223,3 +241,70 @@ class TibetanResearchSDK:
             similarity_matrix=matrix,
             matches=matches,
         )
+
+    def pairwise_from_embedding_views(
+        self,
+        embedding_a: EmbeddingView,
+        embedding_b: EmbeddingView,
+        *,
+        top_k: int = 100,
+    ) -> PairwiseView:
+        if embedding_a.model_id != embedding_b.model_id:
+            raise ValueError("Embedding views must use the same model_id.")
+        if embedding_a.embeddings.ndim != 2 or embedding_b.embeddings.ndim != 2:
+            raise ValueError("Embedding views must contain rank-2 embedding arrays.")
+        if embedding_a.embeddings.shape[0] != len(embedding_a.sentences):
+            raise ValueError("Embedding view A row count must match its sentence count.")
+        if embedding_b.embeddings.shape[0] != len(embedding_b.sentences):
+            raise ValueError("Embedding view B row count must match its sentence count.")
+
+        matrix = cosine_similarity_matrix(embedding_a.embeddings, embedding_b.embeddings)
+        matches = global_top_k_matches(matrix, embedding_a.sentences, embedding_b.sentences, top_k)
+        return PairwiseView(
+            model_id=embedding_a.model_id,
+            device=embedding_a.device,
+            segments_a=embedding_a.sentences,
+            segments_b=embedding_b.sentences,
+            similarity_matrix=matrix,
+            matches=matches,
+        )
+
+    def _segment_text_to_sentences(self, text: str) -> list[str]:
+        view = self.segment_text(text)
+        return [segment for segment in view.segments if segment.strip()]
+
+    def _get_embedder(
+        self,
+        *,
+        model_id: str,
+        batch_size: int,
+        device: Literal["auto", "cpu", "mps", "cuda"],
+        embedding_progress: Literal["off", "batch", "sentence"],
+        torch_dtype: TorchDTypeName | None,
+        device_map: str | dict[str, int | str] | None,
+        load_in_8bit: bool,
+    ) -> TextEmbedder:
+        cache_key = (
+            model_id,
+            device,
+            torch_dtype,
+            repr(device_map),
+            load_in_8bit,
+        )
+        embedder = self._embedders.get(cache_key)
+        if embedder is None:
+            embedder = TextEmbedder(
+                model_id=model_id,
+                batch_size=batch_size,
+                normalize_embeddings=True,
+                device=device,
+                embedding_progress=embedding_progress,
+                torch_dtype=torch_dtype,
+                device_map=device_map,
+                load_in_8bit=load_in_8bit,
+            )
+            self._embedders[cache_key] = embedder
+        else:
+            embedder.batch_size = batch_size
+            embedder.embedding_progress = embedding_progress
+        return embedder
