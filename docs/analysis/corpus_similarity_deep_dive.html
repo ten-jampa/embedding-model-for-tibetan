@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tibetan Corpus Similarity Deep Dive</title>
+    <style>
+      :root {
+        --bg: #f6efe5;
+        --bg-strong: #efe2d0;
+        --panel: rgba(255, 252, 247, 0.9);
+        --ink: #201914;
+        --muted: #5d5348;
+        --accent: #8f4d2f;
+        --accent-2: #b9804f;
+        --accent-soft: rgba(143, 77, 47, 0.1);
+        --border: rgba(32, 25, 20, 0.12);
+        --shadow: 0 18px 40px rgba(52, 39, 28, 0.08);
+        --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+        --sans: "Avenir Next", "Segoe UI", sans-serif;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(185, 128, 79, 0.18), transparent 30%),
+          radial-gradient(circle at top right, rgba(143, 77, 47, 0.08), transparent 24%),
+          linear-gradient(180deg, #fbf7f1 0%, var(--bg) 56%, #f3e8d8 100%);
+      }
+
+      .shell {
+        width: min(1120px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0 4rem;
+      }
+
+      .hero {
+        padding: 2.25rem;
+        border: 1px solid var(--border);
+        border-radius: 32px;
+        background: linear-gradient(135deg, rgba(255, 253, 249, 0.94), rgba(248, 239, 229, 0.88));
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow {
+        margin: 0 0 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 0.78rem;
+        color: var(--accent);
+      }
+
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: var(--serif);
+        line-height: 1.08;
+        margin: 0;
+      }
+
+      h1 {
+        max-width: 13ch;
+        font-size: clamp(2.7rem, 5.2vw, 5rem);
+      }
+
+      h2 {
+        font-size: clamp(1.5rem, 2.2vw, 2.15rem);
+        margin-bottom: 0.85rem;
+      }
+
+      h3 {
+        font-size: 1.2rem;
+        margin-bottom: 0.55rem;
+      }
+
+      p,
+      li {
+        line-height: 1.72;
+        color: var(--muted);
+      }
+
+      .thesis {
+        margin: 1.2rem 0 0;
+        max-width: 68ch;
+        font-size: 1.08rem;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.9fr;
+        gap: 1rem;
+        margin-top: 1.6rem;
+      }
+
+      .mini-panel {
+        padding: 1rem 1.1rem;
+        border-radius: 20px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.58);
+      }
+
+      .mini-panel ul {
+        margin: 0.6rem 0 0;
+        padding-left: 1.2rem;
+      }
+
+      nav {
+        margin: 1.2rem 0 0;
+      }
+
+      nav a {
+        display: inline-block;
+        margin: 0.35rem 0.5rem 0 0;
+        padding: 0.52rem 0.85rem;
+        border-radius: 999px;
+        text-decoration: none;
+        color: var(--accent);
+        background: var(--accent-soft);
+        border: 1px solid rgba(143, 77, 47, 0.14);
+        font-size: 0.92rem;
+      }
+
+      main {
+        display: grid;
+        gap: 1.15rem;
+        margin-top: 1.35rem;
+      }
+
+      section {
+        padding: 1.6rem;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+      }
+
+      .grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .grid.cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid.cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .card {
+        padding: 1rem 1.05rem;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.64);
+      }
+
+      .callout {
+        margin-top: 1rem;
+        padding: 1rem 1.1rem;
+        border-left: 4px solid var(--accent);
+        border-radius: 16px;
+        background: var(--accent-soft);
+      }
+
+      .metric-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.85rem;
+        font-size: 0.95rem;
+      }
+
+      .metric-table th,
+      .metric-table td {
+        padding: 0.8rem 0.7rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .metric-table th {
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .metric-table code {
+        font-family: var(--mono);
+        font-size: 0.92em;
+        color: var(--ink);
+      }
+
+      .rank-list {
+        margin: 0.75rem 0 0;
+        padding-left: 1.2rem;
+      }
+
+      .quote {
+        padding: 1rem 1.1rem;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(248,239,229,0.72));
+      }
+
+      .quote strong {
+        color: var(--ink);
+      }
+
+      .formula {
+        display: block;
+        margin: 0.85rem 0;
+        padding: 0.9rem 1rem;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: #231d18;
+        color: #f9f1e7;
+        font-family: var(--mono);
+        font-size: 0.94rem;
+        overflow-x: auto;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 0.22rem 0.48rem;
+        border-radius: 999px;
+        background: rgba(185, 128, 79, 0.16);
+        color: var(--accent);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      footer {
+        margin-top: 1.4rem;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      @media (max-width: 900px) {
+        .hero-grid,
+        .grid.cols-2,
+        .grid.cols-3 {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .shell {
+          width: min(100% - 1rem, 1120px);
+          padding-top: 1rem;
+        }
+
+        .hero,
+        section {
+          padding: 1.2rem;
+          border-radius: 20px;
+        }
+
+        nav a {
+          margin-right: 0.25rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <p class="eyebrow">Learning Burst • Corpus Analysis Deep Dive</p>
+        <h1>Tibetan Cross-Corpus Similarity with Gemma-Mitra</h1>
+        <p class="thesis">
+          The right use of this pipeline is not to let an embedding model declare copying, but to build a
+          disciplined bridge from sentence-level semantic matches to corpus-level candidate evidence that a
+          human scholar can actually inspect.
+        </p>
+        <div class="hero-grid">
+          <div class="mini-panel">
+            <h3>What this page captures</h3>
+            <ul>
+              <li>The current pipeline shape from sentence embeddings to corpus summaries</li>
+              <li>The methodological lessons from notebook experiments and segmentation audits</li>
+              <li>The cautions introduced by Gemma-Mitra's asymmetric retrieval setup</li>
+              <li>The next statistical layer needed to turn local scores into a macro map</li>
+            </ul>
+          </div>
+          <div class="mini-panel">
+            <h3>Core research stance</h3>
+            <ul>
+              <li>Use AI similarity as candidate generation, not as a verdict machine</li>
+              <li>Preserve provenance: what was compared, excluded, and deduplicated</li>
+              <li>Favor inspectable artifacts over a single magic score</li>
+              <li>Always bring high-scoring passages back to close reading</li>
+            </ul>
+          </div>
+        </div>
+        <nav>
+          <a href="#problem">Problem</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#findings">Findings</a>
+          <a href="#macro">Macro Statistics</a>
+          <a href="#paper">Paper Lens</a>
+          <a href="#next">Next Steps</a>
+        </nav>
+      </header>
+
+      <main>
+        <section id="problem">
+          <p class="badge">Why this matters</p>
+          <h2>The actual question is historical, not merely computational</h2>
+          <p>
+            The motivating problem is whether two Tibetan corpora from different sectarian settings contain
+            evidence of textual borrowing, reuse, or unusually strong semantic overlap. That sounds like a
+            similarity problem, but it is really a layered inference problem. A high score between two
+            sentences may reflect genuine reuse, shared doctrinal vocabulary, shared liturgical opening style,
+            or a broad semantic field that many texts in the tradition inhabit.
+          </p>
+          <p>
+            This is worth knowing: when the historical question is stronger than the statistical instrument,
+            the honest job of the pipeline is to reduce the search space and surface suspicious regions. It
+            should not pretend to replace philology.
+          </p>
+          <div class="callout">
+            <strong>Working thesis:</strong> the system should optimize for reviewability, robustness, and
+            traceability, not just raw similarity ranking.
+          </div>
+        </section>
+
+        <section id="pipeline">
+          <p class="badge">System map</p>
+          <h2>What the current pipeline actually does</h2>
+          <div class="grid cols-3">
+            <article class="card">
+              <h3>1. Segment Tibetan text</h3>
+              <p>
+                Each text is segmented into Tibetan sentence-like units using the current
+                <code>botok_ours</code> engine. This is not a trivial preprocessing step. In this project, the
+                segmentation engine is the first model in the chain, because bad segment boundaries distort
+                everything downstream.
+              </p>
+            </article>
+            <article class="card">
+              <h3>2. Embed each sentence</h3>
+              <p>
+                Every segment is sent through Gemma-Mitra and represented as a normalized vector using the
+                last non-padding token hidden state. Those vectors are the atomic objects out of which all
+                later similarity scores are built.
+              </p>
+            </article>
+            <article class="card">
+              <h3>3. Compare all sentences across texts</h3>
+              <p>
+                For a text pair with <code>N</code> and <code>M</code> segments, the system produces an
+                <code>N × M</code> similarity matrix. At corpus scale, this becomes a grid of text-pair
+                matrices across the two directories.
+              </p>
+            </article>
+          </div>
+          <span class="formula">Text A → [a₁, a₂, ... aₙ] and Text B → [b₁, b₂, ... bₘ] ⇒ S[i, j] = cosine(embed(aᵢ), embed(bⱼ))</span>
+          <p>
+            The inner loop already exists in the SDK. The missing engineering layer is the outer
+            orchestration: scan folders, deduplicate files, persist embeddings, generate pairwise matrices,
+            and summarize them into a macro-level map.
+          </p>
+        </section>
+
+        <section>
+          <p class="badge">Key design decision</p>
+          <h2>Why Gemma-Mitra introduced a methodological fork</h2>
+          <div class="grid cols-2">
+            <article class="card">
+              <h3>Model-card retrieval mode</h3>
+              <p>
+                Gemma-Mitra was published as an asymmetric retrieval model. In that setup, the query side is
+                wrapped with an instruction prefix and the corpus side is left as raw text. The current SDK
+                default follows that design.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Neutral peer-comparison mode</h3>
+              <p>
+                The project question sounds more like sentence-to-sentence comparison between peers than a
+                search query against a candidate corpus. That is why we tested <code>query_corpus</code>,
+                <code>query_query</code>, and <code>raw_raw</code> instead of inheriting retrieval mode blindly.
+              </p>
+            </article>
+          </div>
+          <div class="callout">
+            <strong>Important distinction:</strong> cosine similarity itself is symmetric, but the embedding
+            protocol may not be. The asymmetry enters before cosine is computed.
+          </div>
+        </section>
+
+        <section id="findings">
+          <p class="badge">What we learned empirically</p>
+          <h2>Current evidence from the corpus audit and notebook work</h2>
+          <div class="grid cols-2">
+            <article class="card">
+              <h3>Segmentation looks usable, not solved</h3>
+              <p>
+                The corpus-wide audit suggested mostly reasonable segment lengths. One corpus produced 4,967
+                segments with median length 43 characters and only a handful of long outliers. The second
+                corpus produced 3,837 segments with median length 39 characters and almost no extreme
+                segments. That supports a first-pass run, but not blind confidence.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Exact duplicate handling is necessary</h3>
+              <p>
+                The input directories already contain exact duplicate files and an older-versions subfolder.
+                That means the outer runner must detect duplicates by hash, retain one canonical witness,
+                record exclusions, and keep a provenance report.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Protocol differences changed numbers more than rankings</h3>
+              <p>
+                On both the synthetic paragraph test and the later real-passage test, the strongest matches
+                were broadly stable across <code>query_corpus</code>, <code>query_query</code>, and
+                <code>raw_raw</code>. Score magnitudes moved, but the alignment pattern did not collapse.
+              </p>
+            </article>
+            <article class="card">
+              <h3>8-bit Colab inference is viable for exploration</h3>
+              <p>
+                A T4 runtime could load the 9B model in 8-bit with about 9.5 GB allocated GPU memory after
+                warmup. The first load was slow, but subsequent single-sentence embeddings were sub-second.
+                That is enough for protocol analysis and limited batch runs, though AWS is still cleaner for a
+                full reproducible corpus job.
+              </p>
+            </article>
+          </div>
+          <div class="quote">
+            <strong>Most important qualitative result:</strong> the top sentence matches were often
+            meaningful, but many looked meaningful at the level of shared doctrinal-opening rhetoric rather
+            than clear textual reuse. That is exactly the kind of ambiguity the final system must preserve
+            rather than hide.
+          </div>
+        </section>
+
+        <section>
+          <p class="badge">Notebook signal</p>
+          <h2>What the first real-passage comparison suggested</h2>
+          <p>
+            Four real passage pairs were compared across the sectarian corpora. The strongest pair was the
+            one that also looked strongest to a human before running the model: two elevated opening passages
+            with homage, exalted doctrinal framing, and proclamation-like rhetoric. The weakest pair was the
+            one with the clearest genre mismatch: practical contemplative instruction versus grand doctrinal
+            opening.
+          </p>
+          <table class="metric-table">
+            <thead>
+              <tr>
+                <th>Text pair</th>
+                <th>Observed pattern</th>
+                <th>Interpretation</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>A1 vs B2</code></td>
+                <td>Highest max scores across most protocols</td>
+                <td>Likely driven by shared rhetorical mode and doctrinal opening structure</td>
+              </tr>
+              <tr>
+                <td><code>A1 vs B1</code></td>
+                <td>Mid-strength similarity</td>
+                <td>Shared conceptual field, less direct rhetorical alignment</td>
+              </tr>
+              <tr>
+                <td><code>A2 vs B1</code></td>
+                <td>Mid-strength similarity</td>
+                <td>Potentially more interesting philosophically than liturgically</td>
+              </tr>
+              <tr>
+                <td><code>A2 vs B2</code></td>
+                <td>Weakest overall</td>
+                <td>Genre mismatch matters; not all high-register texts align equally</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            <strong>Lesson:</strong> the model is not returning random noise, but it is also not automatically
+            isolating reuse. It is partly sensitive to genre, rhetoric, and doctrinal register.
+          </div>
+        </section>
+
+        <section id="macro">
+          <p class="badge">Macro statistics</p>
+          <h2>How microscopic scores should color the macroscopic space</h2>
+          <p>
+            The atomic object is an <code>N × M</code> sentence similarity matrix for one text pair. The
+            right statistical move is not to squash that to a single number immediately. Instead, summarize
+            each matrix with a small family of features that capture different structural signals.
+          </p>
+          <table class="metric-table">
+            <thead>
+              <tr>
+                <th>Summary</th>
+                <th>What it captures</th>
+                <th>Main weakness</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>max(S)</code></td>
+                <td>A single striking parallel</td>
+                <td>Too fragile; one accidental hit can dominate</td>
+              </tr>
+              <tr>
+                <td><code>mean(S)</code></td>
+                <td>Overall semantic proximity</td>
+                <td>Diluted when most sentence pairs are unrelated</td>
+              </tr>
+              <tr>
+                <td><code>meanᵢ maxⱼ S[i,j]</code></td>
+                <td>How well each sentence in A finds a best match in B</td>
+                <td>Can still reward generic shared language</td>
+              </tr>
+              <tr>
+                <td><code>meanⱼ maxᵢ S[i,j]</code></td>
+                <td>The reverse directional coverage</td>
+                <td>Needs interpretation alongside the row-wise version</td>
+              </tr>
+              <tr>
+                <td><code>p95(S)</code> or <code>p99(S)</code></td>
+                <td>Upper-tail strength without relying on one maximum</td>
+                <td>Threshold behavior can still be genre-sensitive</td>
+              </tr>
+              <tr>
+                <td><code>top-k mean</code></td>
+                <td>A handful of strongest local parallels</td>
+                <td>K must be chosen deliberately</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            After that first layer, the next important signals are structural rather than purely numeric:
+            density above threshold, clustered high-similarity regions, and whether matched sentences preserve
+            any rough ordering. A genuine borrowing-like relationship tends to produce more local coherence
+            than a handful of scattered peaks.
+          </p>
+          <span class="formula">Recommended first-pass text-pair profile = [max, p95, mean_best_row, mean_best_col, top_k_mean, high_score_density, block_coherence]</span>
+        </section>
+
+        <section>
+          <p class="badge">Statistical discipline</p>
+          <h2>The missing ingredient is a background distribution</h2>
+          <p>
+            A score like <code>0.68</code> does not mean much in the abstract. It only means something
+            relative to this model, this segmentation pipeline, and this genre. That is why the strongest
+            corpus-level next step is not just ranking text pairs; it is comparing cross-corpus score
+            distributions against baselines.
+          </p>
+          <div class="grid cols-3">
+            <article class="card">
+              <h3>Cross-corpus baseline</h3>
+              <p>Compare the distribution of cross-sect text-pair summaries against one another.</p>
+            </article>
+            <article class="card">
+              <h3>Within-corpus baseline</h3>
+              <p>Compare cross-corpus text pairs against within-corpus pairs from each side.</p>
+            </article>
+            <article class="card">
+              <h3>Permutation-style control</h3>
+              <p>Optionally compare against shuffled or reassigned sentence structures to estimate chance.</p>
+            </article>
+          </div>
+          <div class="callout">
+            <strong>Plain-language version:</strong> the real question is not “is this score high?” It is
+            “is this score unusually high for this kind of Tibetan material?”
+          </div>
+        </section>
+
+        <section id="paper">
+          <p class="badge">Paper lens</p>
+          <h2>What the Keutzer paper contributes to this project</h2>
+          <p>
+            The paper on Mind-section literature is useful less as a code recipe than as a methodological
+            model. It treats text analytics as exploratory distant reading that narrows the field for later
+            close reading. That is the right posture for this project too.
+          </p>
+          <div class="grid cols-2">
+            <article class="card">
+              <h3>Where the paper aligns with this work</h3>
+              <p>
+                It asks sectarian and genre questions using corpus comparison, similarity analysis, and
+                clustering. It also highlights that different Tibetan corpora can share topical commonality
+                while still being distinguishable in style and vocabulary.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Where the paper warns us to stay cautious</h3>
+              <p>
+                In its discussion of possible borrowing, cosine similarity helped surface a candidate but
+                could not settle directionality or layered textual history. That warning transfers directly to
+                our embedding setup.
+              </p>
+            </article>
+          </div>
+          <div class="quote">
+            <strong>Best takeaway from the paper:</strong> quantitative similarity is good for finding where
+            to read hard, not for skipping the hard reading.
+          </div>
+        </section>
+
+        <section>
+          <p class="badge">Pitfalls</p>
+          <h2>What can go wrong if the system is used naively</h2>
+          <div class="grid cols-2">
+            <article class="card">
+              <h3>Shared sacred register can masquerade as reuse</h3>
+              <p>
+                A model can be impressed by invocations, stock epithets, and doctrinal opening language even
+                when the real textual relationship is weak.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Bad segmentation quietly corrupts downstream evidence</h3>
+              <p>
+                If the sentence unit is wrong, the embedding unit is wrong, and the similarity matrix becomes
+                harder to interpret no matter how good the model is.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Retrieval asymmetry may bias interpretation</h3>
+              <p>
+                If one side is encoded as a query and the other as corpus text, differences in role encoding
+                can affect scores even when the underlying sentence meanings are similar.
+              </p>
+            </article>
+            <article class="card">
+              <h3>One-number corpus summaries are misleading</h3>
+              <p>
+                A single maximum score or average collapses away whether the evidence is isolated, sustained,
+                directional, or structurally coherent.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="next">
+          <p class="badge">Execution plan</p>
+          <h2>Recommended next steps</h2>
+          <ol class="rank-list">
+            <li>Build the corpus orchestration layer around the SDK: folder scan, exact-dedup by hash, manifests, and exclusion reports.</li>
+            <li>Persist one embedding artifact per retained file, so the expensive step is done once and the full run is resumable on AWS.</li>
+            <li>Compute one sentence matrix per text pair and store both the full matrix and a ranked top-k evidence table.</li>
+            <li>Summarize each matrix with a compact profile: <code>max</code>, <code>p95</code>, <code>mean_best_row</code>, <code>mean_best_col</code>, <code>top_k_mean</code>, and a simple coherence feature.</li>
+            <li>Run both a canonical protocol and at least one robustness protocol on a sample, so the final method is not overfit to one formatting choice.</li>
+            <li>Compare cross-corpus distributions against within-corpus baselines before making any historical claims.</li>
+            <li>Manually inspect the highest-value matches, especially the ones that look content-bearing rather than merely liturgical or generic.</li>
+          </ol>
+          <div class="callout">
+            <strong>Recommended output of the finished system:</strong> a ranked corpus map of suspicious
+            text pairs, each linked to the exact sentences and passages that caused the ranking.
+          </div>
+        </section>
+
+        <section>
+          <p class="badge">Open questions</p>
+          <h2>What still needs to be verified</h2>
+          <ul class="rank-list">
+            <li>Whether symmetric encoding changes any top-ranked file pairs once the sample grows beyond a few passages.</li>
+            <li>How often the 512-token limit actually truncates real Tibetan segments in the full corpus run.</li>
+            <li>Whether a simple block-coherence statistic is enough, or whether a more explicit passage-alignment model is needed.</li>
+            <li>How much 8-bit inference changes rankings relative to a higher-precision run on stronger hardware.</li>
+            <li>Which top-k matches remain interesting after filtering out formulaic doctrinal-opening language.</li>
+          </ul>
+        </section>
+      </main>
+
+      <footer>
+        Built from the corpus-pairwise-analysis workstream: segmentation audit, Gemma-Mitra protocol analysis,
+        Colab deployment lessons, and methodological guidance from the Mind-section text-analytics paper.
+      </footer>
+    </div>
+  </body>
+</html>
