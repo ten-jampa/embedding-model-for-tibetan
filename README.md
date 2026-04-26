@@ -11,6 +11,8 @@ This repository provides an end-to-end Tibetan research pipeline for:
 - `scripts/`: runnable workflows (`run_tibetan_pipeline.py`, `run_pairwise_text_similarity.py`, etc.)
 - `notebooks/01_research_sdk_starter.ipynb`: starter notebook for modular testing
 - `notebooks/03_sdk_starter_v2.ipynb`: starter notebook with SDK cache checks and pairwise-from-embeddings workflow
+- `notebooks/04_embedding_protocol_comparison.ipynb`: canonical protocol-analysis notebook comparing `query_corpus`, reversed `query_corpus`, `query_query`, and `raw_raw` on both toy passages and real cross-corpus Tibetan excerpts
+- `docs/analysis/corpus_similarity_deep_dive.html`: standalone synthesis of the analysis loop, methodological lessons, and corpus-scale next steps
 - `tests/`: `unittest` suite
 - `output/`: local run artifacts (git-ignored)
 
